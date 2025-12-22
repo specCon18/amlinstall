@@ -1,18 +1,19 @@
 # Auto MelonLoader Installer (Go)
 
+[![Nix Flake](https://img.shields.io/badge/Nix-Flake-5277C3?logo=nixos&logoColor=white)](https://nixos.wiki/wiki/Flakes)
+![Nix](https://img.shields.io/badge/NIX-5277C3.svg?style=for-the-badge&logo=NixOS&logoColor=white)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/specCon18/automelonloaderinstallergo)](https://go.dev/)
+
+![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)
+![NixOS](https://img.shields.io/badge/NIXOS-5277C3.svg?style=for-the-badge&logo=NixOS&logoColor=white)
+![Arch amd64](https://img.shields.io/badge/arch-amd64-success)
+
 [![License](https://img.shields.io/github/license/specCon18/automelonloaderinstallergo)](LICENSE)
 
+![GitHub](https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white)
 [![Latest Release](https://img.shields.io/github/v/release/specCon18/automelonloaderinstallergo)](https://github.com/specCon18/automelonloaderinstallergo/releases)
-[![Downloads](https://img.shields.io/github/downloads/specCon18/automelonloaderinstallergo/total)](https://github.com/specCon18/automelonloaderinstallergo/releases)
 
-![OS Linux](https://img.shields.io/badge/OS-Linux-blue)
-![OS macOS](https://img.shields.io/badge/OS-macOS-blue)
-![Arch amd64](https://img.shields.io/badge/arch-amd64-success)
-![Arch arm64](https://img.shields.io/badge/arch-arm64-success)
 
-[![built with nix](https://builtwithnix.org/badge.svg)](https://builtwithnix.org)
-[![Nix Flake](https://img.shields.io/badge/Nix-Flake-5277C3?logo=nixos&logoColor=white)](https://nixos.wiki/wiki/Flakes)
 
 ## Overview
 

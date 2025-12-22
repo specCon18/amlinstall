@@ -39,7 +39,7 @@
           default = pkgs.callPackage (
             { buildGoModule }:
             buildGoModule {
-              pname = "automelonlaoderinstallergo";
+              pname = "amlinstall";
               version = "0.0.1";
               src = builtins.path {
                 name = "source";
