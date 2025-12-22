@@ -1,7 +1,6 @@
 # Auto MelonLoader Installer (Go)
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/specCon18/automelonloaderinstallergo)](https://go.dev/)
-[![License](https://img.shields.io/github/license/specCon18/automelonloaderinstallergo)](LICENSE)
 
 [![Latest Release](https://img.shields.io/github/v/release/specCon18/automelonloaderinstallergo)](https://github.com/specCon18/automelonloaderinstallergo/releases)
 [![Downloads](https://img.shields.io/github/downloads/specCon18/automelonloaderinstallergo/total)](https://github.com/specCon18/automelonloaderinstallergo/releases)
