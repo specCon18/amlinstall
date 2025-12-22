@@ -1,6 +1,5 @@
 # Auto MelonLoader Installer (Go)
 
-[![Build](https://github.com/specCon18/automelonloaderinstallergo/actions/workflows/build.yml/badge.svg)](https://github.com/specCon18/automelonloaderinstallergo/actions)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/specCon18/automelonloaderinstallergo)](https://go.dev/)
 [![License](https://img.shields.io/github/license/specCon18/automelonloaderinstallergo)](LICENSE)
 
@@ -12,8 +11,8 @@
 ![Arch amd64](https://img.shields.io/badge/arch-amd64-success)
 ![Arch arm64](https://img.shields.io/badge/arch-arm64-success)
 
+[![built with nix](https://builtwithnix.org/badge.svg)](https://builtwithnix.org)
 [![Nix Flake](https://img.shields.io/badge/Nix-Flake-5277C3?logo=nixos&logoColor=white)](https://nixos.wiki/wiki/Flakes)
-[![Nix Flake Input](https://img.shields.io/badge/flake-input-automelonloaderinstallergo-5277C3?logo=nixos&logoColor=white)](https://github.com/specCon18/automelonloaderinstallergo)
 
 ## Overview
 
