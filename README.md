@@ -1,6 +1,5 @@
 # Auto MelonLoader Installer (Go)
 
-[![Build](https://github.com/specCon18/automelonloaderinstallergo/actions/workflows/build.yml/badge.svg)](https://github.com/specCon18/automelonloaderinstallergo/actions)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/specCon18/automelonloaderinstallergo)](https://go.dev/)
 [![License](https://img.shields.io/github/license/specCon18/automelonloaderinstallergo)](LICENSE)
 
