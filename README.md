@@ -11,6 +11,7 @@ A sane way to automate the install of melon loader
 - start coding in your desired editor
 
 ### Project structure
+```sh
 ./
 ├── cmd
 │   ├── root.go -> the entrypoint for your cli
@@ -31,6 +32,6 @@ A sane way to automate the install of melon loader
     ├── run.go -> tui entrypoint
     ├── update.go -> bubbletea model update functions go here
     └── view.go -> bubbletea view functions go here
-
+```
 ### Generating sub-commands
 use cobra-cli to generate sub-commands
