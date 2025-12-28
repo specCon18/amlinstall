@@ -41,30 +41,26 @@ func normalizeTag(tag string) string {
 	return tag
 }
 
-// semver-ish parsing and comparison.
-// Supports:
+// versionKey supports ANY number of numeric dot segments:
+//   - "0.2.7.4"
 //   - "1.2.3"
 //   - "1.2"
 //   - "1"
-//   - "1.2.3-rc.1"
-// Comparison:
-//   - major/minor/patch descending
-//   - release > prerelease for same version
-//   - prerelease compared by semver rules (numeric identifiers < non-numeric, shorter wins if equal prefix)
-type semverKey struct {
-	ok         bool
-	major      int
-	minor      int
-	patch      int
-	pre        []string
-	hasPre     bool
-	origString string
+// and semver-like prerelease ordering:
+//   - release > prerelease (same core)
+//   - prerelease identifiers compared per semver rules (numeric < non-numeric, etc.)
+type versionKey struct {
+	ok     bool
+	core   []int
+	hasPre bool
+	pre    []string
 }
 
-func parseSemver(s string) semverKey {
+func parseVersion(s string) versionKey {
 	s = strings.TrimSpace(s)
-	k := semverKey{origString: s}
+	var k versionKey
 
+	// Require leading digit to treat as version-like.
 	if s == "" || !unicode.IsDigit(rune(s[0])) {
 		return k
 	}
@@ -77,55 +73,37 @@ func parseSemver(s string) semverKey {
 		k.hasPre = true
 	}
 
-	parts := strings.Split(main, ".")
-	if len(parts) > 3 {
-		return k
+	coreParts := strings.Split(main, ".")
+	if len(coreParts) == 0 {
+		return versionKey{}
 	}
 
-	parseInt := func(p string) (int, bool) {
+	k.core = make([]int, 0, len(coreParts))
+	for _, p := range coreParts {
 		if p == "" {
-			return 0, false
+			return versionKey{}
 		}
 		for _, r := range p {
 			if !unicode.IsDigit(r) {
-				return 0, false
+				return versionKey{}
 			}
 		}
 		v, err := strconv.Atoi(p)
 		if err != nil {
-			return 0, false
+			return versionKey{}
 		}
-		return v, true
-	}
-
-	var ok bool
-	if len(parts) >= 1 {
-		k.major, ok = parseInt(parts[0])
-		if !ok {
-			return semverKey{origString: s}
-		}
-	}
-	if len(parts) >= 2 {
-		k.minor, ok = parseInt(parts[1])
-		if !ok {
-			return semverKey{origString: s}
-		}
-	}
-	if len(parts) == 3 {
-		k.patch, ok = parseInt(parts[2])
-		if !ok {
-			return semverKey{origString: s}
-		}
+		k.core = append(k.core, v)
 	}
 
 	if k.hasPre && pre != "" {
 		k.pre = strings.Split(pre, ".")
 	}
+
 	k.ok = true
 	return k
 }
 
-func isNumeric(s string) (int, bool) {
+func isNumericIdent(s string) (int, bool) {
 	if s == "" {
 		return 0, false
 	}
@@ -142,7 +120,7 @@ func isNumeric(s string) (int, bool) {
 }
 
 func cmpPrerelease(a, b []string) int {
-	// Return: -1 if a<b, 0 if equal, +1 if a>b (per semver precedence rules)
+	// -1 if a<b, 0 if equal, +1 if a>b (semver precedence rules)
 	n := len(a)
 	if len(b) < n {
 		n = len(b)
@@ -151,20 +129,21 @@ func cmpPrerelease(a, b []string) int {
 		ai := a[i]
 		bi := b[i]
 
-		ain, aIsNum := isNumeric(ai)
-		bin, bIsNum := isNumeric(bi)
+		ain, aNum := isNumericIdent(ai)
+		bin, bNum := isNumericIdent(bi)
 
 		switch {
-		case aIsNum && bIsNum:
+		case aNum && bNum:
 			if ain < bin {
 				return -1
 			}
 			if ain > bin {
 				return 1
 			}
-		case aIsNum && !bIsNum:
+		case aNum && !bNum:
+			// numeric < non-numeric
 			return -1
-		case !aIsNum && bIsNum:
+		case !aNum && bNum:
 			return 1
 		default:
 			if ai < bi {
@@ -175,6 +154,7 @@ func cmpPrerelease(a, b []string) int {
 			}
 		}
 	}
+	// If equal prefix, shorter prerelease has lower precedence.
 	if len(a) < len(b) {
 		return -1
 	}
@@ -184,10 +164,11 @@ func cmpPrerelease(a, b []string) int {
 	return 0
 }
 
-func semverGreater(displayA, displayB string) bool {
-	a := parseSemver(displayA)
-	b := parseSemver(displayB)
+func versionGreater(aDisp, bDisp string) bool {
+	a := parseVersion(aDisp)
+	b := parseVersion(bDisp)
 
+	// Prefer version-like values over non-version-like values.
 	if a.ok && !b.ok {
 		return true
 	}
@@ -195,19 +176,30 @@ func semverGreater(displayA, displayB string) bool {
 		return false
 	}
 	if !a.ok && !b.ok {
-		return displayA > displayB
+		// fallback: lexical descending
+		return aDisp > bDisp
 	}
 
-	if a.major != b.major {
-		return a.major > b.major
+	// Compare core numeric segments, treating missing segments as 0.
+	n := len(a.core)
+	if len(b.core) > n {
+		n = len(b.core)
 	}
-	if a.minor != b.minor {
-		return a.minor > b.minor
-	}
-	if a.patch != b.patch {
-		return a.patch > b.patch
+	for i := 0; i < n; i++ {
+		av := 0
+		if i < len(a.core) {
+			av = a.core[i]
+		}
+		bv := 0
+		if i < len(b.core) {
+			bv = b.core[i]
+		}
+		if av != bv {
+			return av > bv
+		}
 	}
 
+	// Same core: release > prerelease
 	if a.hasPre != b.hasPre {
 		return !a.hasPre && b.hasPre
 	}
@@ -215,6 +207,7 @@ func semverGreater(displayA, displayB string) bool {
 		return false
 	}
 
+	// Both prerelease: higher prerelease wins
 	return cmpPrerelease(a.pre, b.pre) > 0
 }
 
@@ -345,7 +338,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tagsLoadedMsg:
 		m.loadingTags = false
 
-		// Build tag items (raw + normalized display).
 		items := make([]tagItem, 0, len(msg.tags))
 		for _, t := range msg.tags {
 			items = append(items, tagItem{
@@ -361,27 +353,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Sort semver descending by display value.
+		// FIXED: sort versions descending, supporting 4+ numeric segments like 0.2.7.4
 		sort.Slice(items, func(i, j int) bool {
 			di := items[i].display
 			dj := items[j].display
 			if di == dj {
 				return items[i].raw > items[j].raw
 			}
-			return semverGreater(di, dj)
+			return versionGreater(di, dj)
 		})
 
-		// Mark "latest" (first item after sort).
 		items[0].isLatest = true
 
-		// Convert to list.Items
 		litems := make([]list.Item, 0, len(items))
 		for _, it := range items {
 			litems = append(litems, it)
 		}
 		m.tags.SetItems(litems)
 
-		// Preserve selection by RAW tag if possible; otherwise select latest.
 		selectedIdx := 0
 		if m.selectedTag != "" {
 			found := false
@@ -403,7 +392,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.tags.Select(selectedIdx)
 
-		// FIX #1: Always report selection in the same "Selected tag:" format.
 		selectedDisplay := items[selectedIdx].display
 		if selectedIdx == 0 {
 			m.status = "Selected tag: " + selectedDisplay + " (latest)"
@@ -432,7 +420,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spin, cmd = m.spin.Update(msg)
 
-		// Auto refresh once at startup
 		if m.initialRefresh {
 			m.initialRefresh = false
 			m.loadingTags = true
