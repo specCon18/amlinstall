@@ -20,11 +20,17 @@ const (
 )
 
 type tagItem struct {
-	raw     string // exact git tag, e.g. "v0.6.5"
-	display string // UI value, e.g. "0.6.5"
+	raw      string // exact git tag, e.g. "v0.6.5"
+	display  string // UI value, e.g. "0.6.5"
+	isLatest bool   // visually mark the first (highest) semver
 }
 
-func (t tagItem) Title() string       { return t.display }
+func (t tagItem) Title() string {
+	if t.isLatest {
+		return t.display + "  (latest)"
+	}
+	return t.display
+}
 func (t tagItem) Description() string { return "" }
 func (t tagItem) FilterValue() string { return t.display }
 

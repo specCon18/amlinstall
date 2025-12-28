@@ -3,7 +3,11 @@ package tui
 import (
 	"context"
 	"errors"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
+	"unicode"
 
 	"automelonloaderinstallergo/internal/ghrel"
 
@@ -30,10 +34,197 @@ type downloadErrMsg struct {
 const focusCount = int(focusToken) + 1
 
 func normalizeTag(tag string) string {
+	tag = strings.TrimSpace(tag)
 	if len(tag) > 1 && (tag[0] == 'v' || tag[0] == 'V') {
 		return tag[1:]
 	}
 	return tag
+}
+
+// semver-ish parsing and comparison.
+// Supports:
+//   - "1.2.3"
+//   - "1.2"
+//   - "1"
+//   - "1.2.3-rc.1"
+// Comparison:
+//   - major/minor/patch descending
+//   - release > prerelease for same version
+//   - prerelease compared by semver rules (numeric identifiers < non-numeric, shorter wins if equal prefix)
+type semverKey struct {
+	ok         bool
+	major      int
+	minor      int
+	patch      int
+	pre        []string
+	hasPre     bool
+	origString string
+}
+
+func parseSemver(s string) semverKey {
+	s = strings.TrimSpace(s)
+	k := semverKey{origString: s}
+
+	// Require a leading digit to consider it semver-like.
+	if s == "" || !unicode.IsDigit(rune(s[0])) {
+		return k
+	}
+
+	main := s
+	pre := ""
+	if i := strings.IndexByte(s, '-'); i >= 0 {
+		main = s[:i]
+		pre = s[i+1:]
+		k.hasPre = true
+	}
+
+	parts := strings.Split(main, ".")
+	if len(parts) > 3 {
+		return k
+	}
+
+	parseInt := func(p string) (int, bool) {
+		if p == "" {
+			return 0, false
+		}
+		for _, r := range p {
+			if !unicode.IsDigit(r) {
+				return 0, false
+			}
+		}
+		v, err := strconv.Atoi(p)
+		if err != nil {
+			return 0, false
+		}
+		return v, true
+	}
+
+	var ok bool
+	if len(parts) >= 1 {
+		k.major, ok = parseInt(parts[0])
+		if !ok {
+			return semverKey{origString: s}
+		}
+	}
+	if len(parts) >= 2 {
+		k.minor, ok = parseInt(parts[1])
+		if !ok {
+			return semverKey{origString: s}
+		}
+	}
+	if len(parts) == 3 {
+		k.patch, ok = parseInt(parts[2])
+		if !ok {
+			return semverKey{origString: s}
+		}
+	}
+
+	if k.hasPre && pre != "" {
+		k.pre = strings.Split(pre, ".")
+	}
+	k.ok = true
+	return k
+}
+
+func cmpPrerelease(a, b []string) int {
+	// Return: -1 if a<b, 0 if equal, +1 if a>b (per semver precedence rules)
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	for i := 0; i < n; i++ {
+		ai := a[i]
+		bi := b[i]
+
+		ain, aIsNum := isNumeric(ai)
+		bin, bIsNum := isNumeric(bi)
+
+		switch {
+		case aIsNum && bIsNum:
+			if ain < bin {
+				return -1
+			}
+			if ain > bin {
+				return 1
+			}
+		case aIsNum && !bIsNum:
+			// Numeric identifiers have lower precedence than non-numeric
+			return -1
+		case !aIsNum && bIsNum:
+			return 1
+		default:
+			if ai < bi {
+				return -1
+			}
+			if ai > bi {
+				return 1
+			}
+		}
+	}
+	// If equal so far, shorter prerelease has lower precedence? (Actually: smaller set has lower precedence)
+	// Semver: If a has fewer identifiers and all equal so far, a has lower precedence.
+	if len(a) < len(b) {
+		return -1
+	}
+	if len(a) > len(b) {
+		return 1
+	}
+	return 0
+}
+
+func isNumeric(s string) (int, bool) {
+	if s == "" {
+		return 0, false
+	}
+	for _, r := range s {
+		if !unicode.IsDigit(r) {
+			return 0, false
+		}
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, false
+	}
+	return v, true
+}
+
+func semverGreater(displayA, displayB string) bool {
+	a := parseSemver(displayA)
+	b := parseSemver(displayB)
+
+	// Prefer semver-like values over non-semver-like values.
+	if a.ok && !b.ok {
+		return true
+	}
+	if !a.ok && b.ok {
+		return false
+	}
+	if !a.ok && !b.ok {
+		// Fall back to lexical descending if neither parses.
+		return displayA > displayB
+	}
+
+	// Compare major/minor/patch descending.
+	if a.major != b.major {
+		return a.major > b.major
+	}
+	if a.minor != b.minor {
+		return a.minor > b.minor
+	}
+	if a.patch != b.patch {
+		return a.patch > b.patch
+	}
+
+	// Same base version: release > prerelease
+	if a.hasPre != b.hasPre {
+		return !a.hasPre && b.hasPre
+	}
+	if !a.hasPre && !b.hasPre {
+		return false
+	}
+
+	// Both prerelease: compare prerelease identifiers (higher wins)
+	return cmpPrerelease(a.pre, b.pre) > 0
 }
 
 func refreshTagsCmd() tea.Cmd {
@@ -60,7 +251,7 @@ func downloadCmd(tag, out, token string) tea.Cmd {
 			ctx,
 			hardOwner,
 			hardRepo,
-			tag,       // RAW tag
+			tag, // RAW tag (do not normalize)
 			hardAsset,
 			out,
 			token,
@@ -148,7 +339,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if key == "enter" {
 				if it, ok := m.tags.SelectedItem().(tagItem); ok {
 					m.selectedTag = it.raw
-					m.status = "Selected tag: " + it.display
+					// Show the normalized tag in status
+					if it.isLatest {
+						m.status = "Selected tag: " + it.display + " (latest)"
+					} else {
+						m.status = "Selected tag: " + it.display
+					}
 				}
 			}
 			return m, cmd
@@ -159,36 +355,71 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tagsLoadedMsg:
 		m.loadingTags = false
 
-		items := make([]list.Item, 0, len(msg.tags))
+		// Build tag items (raw + normalized display).
+		items := make([]tagItem, 0, len(msg.tags))
 		for _, t := range msg.tags {
 			items = append(items, tagItem{
 				raw:     t,
 				display: normalizeTag(t),
 			})
 		}
-		m.tags.SetItems(items)
 
-		if len(msg.tags) == 0 {
+		if len(items) == 0 {
 			m.setError(errors.New("no tags found for this repository"))
 			m.status = "No tags found."
+			m.tags.SetItems(nil)
 			return m, nil
 		}
 
+		// Sort semver descending by display value.
+		sort.Slice(items, func(i, j int) bool {
+			di := items[i].display
+			dj := items[j].display
+			if di == dj {
+				// Tie-breaker: stable ordering by raw desc
+				return items[i].raw > items[j].raw
+			}
+			return semverGreater(di, dj)
+		})
+
+		// Mark "latest" (first item after sort).
+		items[0].isLatest = true
+
+		// Convert to list.Items
+		litems := make([]list.Item, 0, len(items))
+		for _, it := range items {
+			litems = append(litems, it)
+		}
+		m.tags.SetItems(litems)
+
+		// Preserve selection by RAW tag if possible; otherwise select first.
+		selectedIdx := 0
 		if m.selectedTag != "" {
-			for i, t := range msg.tags {
-				if t == m.selectedTag {
-					m.tags.Select(i)
-					return m, nil
+			found := false
+			for i := range items {
+				if items[i].raw == m.selectedTag {
+					selectedIdx = i
+					found = true
+					break
 				}
 			}
+			if !found {
+				// fall back to latest
+				m.selectedTag = items[0].raw
+			}
+		} else {
+			m.selectedTag = items[0].raw
 		}
 
-		m.tags.Select(0)
-		if it, ok := m.tags.SelectedItem().(tagItem); ok {
-			m.selectedTag = it.raw
+		m.tags.Select(selectedIdx)
+
+		// Status message
+		if items[0].raw == m.selectedTag {
+			m.status = "Loaded tags. Latest: " + items[0].display
+		} else {
+			m.status = "Loaded tags."
 		}
 
-		m.status = "Loaded tags."
 		return m, nil
 
 	case tagsErrMsg:
@@ -210,6 +441,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spin, cmd = m.spin.Update(msg)
 
+		// Auto refresh once at startup
 		if m.initialRefresh {
 			m.initialRefresh = false
 			m.loadingTags = true
