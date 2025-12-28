@@ -31,7 +31,7 @@ func (m model) View() string {
 				MarginTop(1)
 
 		panelFocused = panelBase.Border(lipgloss.DoubleBorder()).Bold(true)
-		
+
 		settingsTitleStyle = lipgloss.NewStyle().Bold(true).PaddingBottom(1)
 
 		fieldFocused = lipgloss.NewStyle().Bold(true)
@@ -67,14 +67,14 @@ func (m model) View() string {
 
 	title := "MelonLoader Automated Installer Linux Edition"
 	sub := fmt.Sprintf("%s/%s  •  %s", hardOwner, hardRepo, hardAsset)
-	if m.loadingTags {
+	if m.loadingVersions {
 		sub = fmt.Sprintf("%s  •  %s Refreshing Version List…", sub, m.spin.View())
 	}
 	if m.downloading {
 		sub = fmt.Sprintf("%s  •  %s Downloading…", sub, m.spin.View())
 	}
 
-	header := titleBar.Width(w-2*2).Render(
+	header := titleBar.Width(w - 2*2).Render(
 		lipgloss.JoinVertical(
 			lipgloss.Left,
 			bold.Render(title),
@@ -82,9 +82,9 @@ func (m model) View() string {
 		),
 	)
 
-	tagsPanelStyle := panelBase
-	if m.focus == focusTags {
-		tagsPanelStyle = panelFocused
+	versionsPanelStyle := panelBase
+	if m.focus == focusVersions {
+		versionsPanelStyle = panelFocused
 	}
 	settingsPanelStyle := panelBase
 	if m.focus == focusOutput || m.focus == focusToken {
@@ -94,14 +94,14 @@ func (m model) View() string {
 	// Left panel: keep the list's own title ("Version") and remove our redundant header.
 	// Optional: show selected tag as a subtle line below the list (non-redundant).
 	var leftBody strings.Builder
-	leftBody.WriteString(m.tags.View())
+	leftBody.WriteString(m.versions.View())
 
-	if strings.TrimSpace(m.selectedTag) != "" {
+	if strings.TrimSpace(m.selectedVersionTag) != "" {
 		// Show raw tag (may include leading v). If you prefer normalized, say so.
-		fmt.Fprintf(&leftBody, "\n%s", muted.Render("Selected: "+m.selectedTag))
+		fmt.Fprintf(&leftBody, "\n%s", muted.Render("Selected: "+m.selectedVersionTag))
 	}
 
-	tagsPanel := tagsPanelStyle.
+	versionsPanel := versionsPanelStyle.
 		Width(leftW).
 		Render(leftBody.String())
 
@@ -151,7 +151,7 @@ func (m model) View() string {
 
 	content := lipgloss.JoinHorizontal(
 		lipgloss.Top,
-		tagsPanel,
+		versionsPanel,
 		lipgloss.NewStyle().Width(gap).Render(""),
 		rightPanel,
 	)
@@ -167,4 +167,3 @@ func (m model) View() string {
 		),
 	)
 }
-

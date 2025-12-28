@@ -14,39 +14,39 @@ import (
 type focusTarget int
 
 const (
-	focusTags focusTarget = iota
+	focusVersions focusTarget = iota
 	focusOutput
 	focusToken
 )
 
-type tagItem struct {
+type versionItem struct {
 	raw      string // exact git tag, e.g. "v0.6.5"
 	display  string // UI value, e.g. "0.6.5"
 	isLatest bool   // visually mark the first (highest) semver
 }
 
-func (t tagItem) Title() string {
+func (t versionItem) Title() string {
 	if t.isLatest {
 		return t.display + "  (latest)"
 	}
 	return t.display
 }
-func (t tagItem) Description() string { return "" }
-func (t tagItem) FilterValue() string { return t.display }
+func (t versionItem) Description() string { return "" }
+func (t versionItem) FilterValue() string { return t.display }
 
 type model struct {
 	output textinput.Model
 	token  textinput.Model
 
-	tags list.Model
+	versions list.Model
 
-	selectedTag string // RAW tag value
+	selectedVersionTag string // RAW tag value
 
 	focus focusTarget
 
-	loadingTags bool
-	downloading bool
-	spin        spinner.Model
+	loadingVersions bool
+	downloading     bool
+	spin            spinner.Model
 
 	status string
 	err    error
@@ -83,8 +83,8 @@ func newModel() model {
 	m := model{
 		output:         output,
 		token:          token,
-		tags:           l,
-		focus:          focusTags,
+		versions:       l,
+		focus:          focusVersions,
 		spin:           sp,
 		status:         "Ready",
 		initialRefresh: true,
@@ -113,8 +113,8 @@ func (m *model) validateRefresh() error {
 }
 
 func (m *model) validateDownload() error {
-	if strings.TrimSpace(m.selectedTag) == "" {
-		return errors.New("select a tag (refresh with 'ctrl+r' and choose one)")
+	if strings.TrimSpace(m.selectedVersionTag) == "" {
+		return errors.New("select a version (refresh with 'ctrl+r' and choose one)")
 	}
 	if strings.TrimSpace(m.resolveOutput()) == "" {
 		return errors.New("output is required")
@@ -132,4 +132,3 @@ func (m *model) setError(err error) {
 func (m *model) clearError() {
 	m.err = nil
 }
-

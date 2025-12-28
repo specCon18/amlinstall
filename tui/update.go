@@ -11,15 +11,15 @@ import (
 
 	"automelonloaderinstallergo/internal/ghrel"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
-type tagsLoadedMsg struct {
-	tags []string
+type versionsLoadedMsg struct {
+	versions []string
 }
 
-type tagsErrMsg struct {
+type versionsErrMsg struct {
 	err error
 }
 
@@ -46,6 +46,7 @@ func normalizeTag(tag string) string {
 //   - "1.2.3"
 //   - "1.2"
 //   - "1"
+//
 // and semver-like prerelease ordering:
 //   - release > prerelease (same core)
 //   - prerelease identifiers compared per semver rules (numeric < non-numeric, etc.)
@@ -211,18 +212,18 @@ func versionGreater(aDisp, bDisp string) bool {
 	return cmpPrerelease(a.pre, b.pre) > 0
 }
 
-func refreshTagsCmd() tea.Cmd {
+func refreshVersionsCmd() tea.Cmd {
 	remote := ghrel.GitRemoteURL(hardOwner, hardRepo)
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		tags, err := ghrel.GetTagsViaGit(ctx, remote)
+		versions, err := ghrel.GetTagsViaGit(ctx, remote)
 		if err != nil {
-			return tagsErrMsg{err: err}
+			return versionsErrMsg{err: err}
 		}
-		return tagsLoadedMsg{tags: tags}
+		return versionsLoadedMsg{versions: versions}
 	}
 }
 
@@ -257,7 +258,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.tags.SetSize(max(msg.Width-4, 40), max(msg.Height-14, 6))
+		m.versions.SetSize(max(msg.Width-4, 40), max(msg.Height-14, 6))
 		return m, nil
 
 	case tea.KeyMsg:
@@ -274,13 +275,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if key == "ctrl+r" {
-			if m.loadingTags {
+			if m.loadingVersions {
 				return m, nil
 			}
 			m.clearError()
-			m.loadingTags = true
+			m.loadingVersions = true
 			m.status = "Refreshing version list…"
-			return m, refreshTagsCmd()
+			return m, refreshVersionsCmd()
 		}
 
 		if key == "ctrl+d" {
@@ -295,7 +296,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.downloading = true
 			m.status = "Downloading…"
 			return m, downloadCmd(
-				m.selectedTag,
+				m.selectedVersionTag,
 				m.resolveOutput(),
 				m.resolveToken(),
 			)
@@ -316,13 +317,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if m.focus == focusTags {
+		if m.focus == focusVersions {
 			var cmd tea.Cmd
-			m.tags, cmd = m.tags.Update(msg)
+			m.versions, cmd = m.versions.Update(msg)
 
 			if key == "enter" {
-				if it, ok := m.tags.SelectedItem().(tagItem); ok {
-					m.selectedTag = it.raw
+				if it, ok := m.versions.SelectedItem().(versionItem); ok {
+					m.selectedVersionTag = it.raw
 					if it.isLatest {
 						m.status = "Selected version: " + it.display + " (latest)"
 					} else {
@@ -335,12 +336,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m.updateFocusedInput(msg)
 
-	case tagsLoadedMsg:
-		m.loadingTags = false
+	case versionsLoadedMsg:
+		m.loadingVersions = false
 
-		items := make([]tagItem, 0, len(msg.tags))
-		for _, t := range msg.tags {
-			items = append(items, tagItem{
+		items := make([]versionItem, 0, len(msg.versions))
+		for _, t := range msg.versions {
+			items = append(items, versionItem{
 				raw:     t,
 				display: normalizeTag(t),
 			})
@@ -348,8 +349,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if len(items) == 0 {
 			m.setError(errors.New("no versions found for this repository"))
-			m.status = "No tags found."
-			m.tags.SetItems(nil)
+			m.status = "No versions found."
+			m.versions.SetItems(nil)
 			return m, nil
 		}
 
@@ -369,28 +370,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, it := range items {
 			litems = append(litems, it)
 		}
-		m.tags.SetItems(litems)
+		m.versions.SetItems(litems)
 
 		selectedIdx := 0
-		if m.selectedTag != "" {
+		if m.selectedVersionTag != "" {
 			found := false
 			for i := range items {
-				if items[i].raw == m.selectedTag {
+				if items[i].raw == m.selectedVersionTag {
 					selectedIdx = i
 					found = true
 					break
 				}
 			}
 			if !found {
-				m.selectedTag = items[0].raw
+				m.selectedVersionTag = items[0].raw
 				selectedIdx = 0
 			}
 		} else {
-			m.selectedTag = items[0].raw
+			m.selectedVersionTag = items[0].raw
 			selectedIdx = 0
 		}
 
-		m.tags.Select(selectedIdx)
+		m.versions.Select(selectedIdx)
 
 		selectedDisplay := items[selectedIdx].display
 		if selectedIdx == 0 {
@@ -401,8 +402,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 
-	case tagsErrMsg:
-		m.loadingTags = false
+	case versionsErrMsg:
+		m.loadingVersions = false
 		m.setError(msg.err)
 		return m, nil
 
@@ -422,9 +423,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.initialRefresh {
 			m.initialRefresh = false
-			m.loadingTags = true
+			m.loadingVersions = true
 			m.status = "Refreshing version list…"
-			return m, tea.Batch(cmd, refreshTagsCmd())
+			return m, tea.Batch(cmd, refreshVersionsCmd())
 		}
 
 		return m, cmd
@@ -453,4 +454,3 @@ func (m *model) applyFocus() {
 		m.token.Focus()
 	}
 }
-
