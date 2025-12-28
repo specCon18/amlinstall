@@ -20,8 +20,6 @@ const (
 	focusToken
 )
 
-
-
 type tagItem struct {
 	value string
 }
@@ -49,6 +47,9 @@ type model struct {
 
 	width  int
 	height int
+
+	// auto-load tags once after startup
+	initialRefresh bool
 }
 
 func newModel() model {
@@ -76,12 +77,13 @@ func newModel() model {
 	sp := spinner.New()
 
 	m := model{
-		output: output,
-		token:  token,
-		tags:   l,
-		focus:  focusTags,
-		spin:   sp,
-		status: "ctrl+r: refresh tags   ctrl+d: download   tab: next   shift+tab: prev   q: quit",
+		output:         output,
+		token:          token,
+		tags:           l,
+		focus:          focusTags,
+		spin:           sp,
+		status:         "Ready",
+		initialRefresh: true,
 	}
 
 	m.applyFocus()
@@ -100,18 +102,17 @@ func (m *model) resolveOutput() string {
 	if out != "" {
 		return out
 	}
-	// derive from hardcoded asset
 	return filepath.Join(".", "downloads", hardAsset)
 }
 
 func (m *model) validateRefresh() error {
-	// owner/repo are hardcoded, so always valid
 	return nil
 }
 
 func (m *model) validateDownload() error {
 	if strings.TrimSpace(m.selectedTag) == "" {
-		return errors.New("select a tag (refresh with 'r' and choose one)")
+		// keybinding is ctrl+r now
+		return errors.New("select a tag (refresh with 'ctrl+r' and choose one)")
 	}
 	if strings.TrimSpace(m.resolveOutput()) == "" {
 		return errors.New("output is required")
@@ -129,3 +130,4 @@ func (m *model) setError(err error) {
 func (m *model) clearError() {
 	m.err = nil
 }
+

@@ -27,7 +27,6 @@ type downloadErrMsg struct {
 	err error
 }
 
-// Keep focus cycling robust even if you later add/remove focus targets.
 const focusCount = int(focusToken) + 1
 
 func refreshTagsCmd() tea.Cmd {
@@ -88,14 +87,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key == "q" || key == "ctrl+c" {
 			return m, tea.Quit
 		}
-
 		if key == "esc" {
 			m.clearError()
-			m.status = helpText
+			m.status = "Ready"
 			return m, nil
 		}
 
-		// Refresh tags (Ctrl+R)
 		if key == "ctrl+r" {
 			if m.loadingTags {
 				return m, nil
@@ -110,7 +107,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, refreshTagsCmd()
 		}
 
-		// Download (Ctrl+D)
 		if key == "ctrl+d" {
 			if m.downloading {
 				return m, nil
@@ -129,7 +125,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		}
 
-		// Focus navigation (owner/repo/asset removed)
 		if key == "tab" {
 			m.focus = focusTarget((int(m.focus) + 1) % focusCount)
 			m.applyFocus()
@@ -145,7 +140,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Tags list handling
 		if m.focus == focusTags {
 			var cmd tea.Cmd
 			m.tags, cmd = m.tags.Update(msg)
@@ -216,6 +210,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		var cmd tea.Cmd
 		m.spin, cmd = m.spin.Update(msg)
+
+		if m.initialRefresh {
+			m.initialRefresh = false
+			if !m.loadingTags {
+				m.clearError()
+				m.loadingTags = true
+				m.status = "Refreshing tags…"
+				return m, tea.Batch(cmd, refreshTagsCmd())
+			}
+		}
+
 		return m, cmd
 	}
 }
