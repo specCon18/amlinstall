@@ -14,19 +14,19 @@ import (
 type focusTarget int
 
 const (
-	// owner/repo/asset inputs removed
 	focusTags focusTarget = iota
 	focusOutput
 	focusToken
 )
 
 type tagItem struct {
-	value string
+	raw     string // exact git tag, e.g. "v0.6.5"
+	display string // UI value, e.g. "0.6.5"
 }
 
-func (t tagItem) Title() string       { return t.value }
+func (t tagItem) Title() string       { return t.display }
 func (t tagItem) Description() string { return "" }
-func (t tagItem) FilterValue() string { return t.value }
+func (t tagItem) FilterValue() string { return t.display }
 
 type model struct {
 	output textinput.Model
@@ -34,7 +34,7 @@ type model struct {
 
 	tags list.Model
 
-	selectedTag string
+	selectedTag string // RAW tag value
 
 	focus focusTarget
 
@@ -48,7 +48,6 @@ type model struct {
 	width  int
 	height int
 
-	// auto-load tags once after startup
 	initialRefresh bool
 }
 
@@ -67,8 +66,7 @@ func newModel() model {
 	token.EchoMode = textinput.EchoPassword
 	token.EchoCharacter = '•'
 
-	items := []list.Item{}
-	l := list.New(items, list.NewDefaultDelegate(), 40, 8)
+	l := list.New([]list.Item{}, list.NewDefaultDelegate(), 40, 8)
 	l.Title = "Tags"
 	l.SetShowHelp(false)
 	l.SetFilteringEnabled(false)
@@ -91,15 +89,14 @@ func newModel() model {
 }
 
 func (m *model) resolveToken() string {
-	if strings.TrimSpace(m.token.Value()) != "" {
-		return strings.TrimSpace(m.token.Value())
+	if v := strings.TrimSpace(m.token.Value()); v != "" {
+		return v
 	}
 	return strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
 }
 
 func (m *model) resolveOutput() string {
-	out := strings.TrimSpace(m.output.Value())
-	if out != "" {
+	if out := strings.TrimSpace(m.output.Value()); out != "" {
 		return out
 	}
 	return filepath.Join(".", "downloads", hardAsset)
@@ -111,7 +108,6 @@ func (m *model) validateRefresh() error {
 
 func (m *model) validateDownload() error {
 	if strings.TrimSpace(m.selectedTag) == "" {
-		// keybinding is ctrl+r now
 		return errors.New("select a tag (refresh with 'ctrl+r' and choose one)")
 	}
 	if strings.TrimSpace(m.resolveOutput()) == "" {

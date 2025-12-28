@@ -29,6 +29,13 @@ type downloadErrMsg struct {
 
 const focusCount = int(focusToken) + 1
 
+func normalizeTag(tag string) string {
+	if len(tag) > 1 && (tag[0] == 'v' || tag[0] == 'V') {
+		return tag[1:]
+	}
+	return tag
+}
+
 func refreshTagsCmd() tea.Cmd {
 	remote := ghrel.GitRemoteURL(hardOwner, hardRepo)
 
@@ -53,7 +60,7 @@ func downloadCmd(tag, out, token string) tea.Cmd {
 			ctx,
 			hardOwner,
 			hardRepo,
-			tag,
+			tag,       // RAW tag
 			hardAsset,
 			out,
 			token,
@@ -75,10 +82,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-
-		w := max(msg.Width-4, 40)
-		h := max(msg.Height-14, 6)
-		m.tags.SetSize(w, h)
+		m.tags.SetSize(max(msg.Width-4, 40), max(msg.Height-14, 6))
 		return m, nil
 
 	case tea.KeyMsg:
@@ -87,6 +91,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key == "q" || key == "ctrl+c" {
 			return m, tea.Quit
 		}
+
 		if key == "esc" {
 			m.clearError()
 			m.status = "Ready"
@@ -95,10 +100,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if key == "ctrl+r" {
 			if m.loadingTags {
-				return m, nil
-			}
-			if err := m.validateRefresh(); err != nil {
-				m.setError(err)
 				return m, nil
 			}
 			m.clearError()
@@ -131,11 +132,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if key == "shift+tab" {
-			cur := int(m.focus) - 1
-			if cur < 0 {
-				cur = focusCount - 1
+			i := int(m.focus) - 1
+			if i < 0 {
+				i = focusCount - 1
 			}
-			m.focus = focusTarget(cur)
+			m.focus = focusTarget(i)
 			m.applyFocus()
 			return m, nil
 		}
@@ -146,8 +147,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if key == "enter" {
 				if it, ok := m.tags.SelectedItem().(tagItem); ok {
-					m.selectedTag = it.value
-					m.status = "Selected tag: " + m.selectedTag
+					m.selectedTag = it.raw
+					m.status = "Selected tag: " + it.display
 				}
 			}
 			return m, cmd
@@ -160,36 +161,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		items := make([]list.Item, 0, len(msg.tags))
 		for _, t := range msg.tags {
-			items = append(items, tagItem{value: t})
+			items = append(items, tagItem{
+				raw:     t,
+				display: normalizeTag(t),
+			})
 		}
 		m.tags.SetItems(items)
 
 		if len(msg.tags) == 0 {
-			m.selectedTag = ""
-			m.status = "No tags found."
 			m.setError(errors.New("no tags found for this repository"))
+			m.status = "No tags found."
 			return m, nil
 		}
 
 		if m.selectedTag != "" {
-			found := false
 			for i, t := range msg.tags {
 				if t == m.selectedTag {
 					m.tags.Select(i)
-					found = true
-					break
+					return m, nil
 				}
 			}
-			if !found {
-				m.tags.Select(0)
-				m.selectedTag = msg.tags[0]
-			}
-		} else {
-			m.tags.Select(0)
-			m.selectedTag = msg.tags[0]
 		}
 
-		m.status = "Loaded tags. Selected: " + m.selectedTag
+		m.tags.Select(0)
+		if it, ok := m.tags.SelectedItem().(tagItem); ok {
+			m.selectedTag = it.raw
+		}
+
+		m.status = "Loaded tags."
 		return m, nil
 
 	case tagsErrMsg:
@@ -213,12 +212,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.initialRefresh {
 			m.initialRefresh = false
-			if !m.loadingTags {
-				m.clearError()
-				m.loadingTags = true
-				m.status = "Refreshing tags…"
-				return m, tea.Batch(cmd, refreshTagsCmd())
-			}
+			m.loadingTags = true
+			m.status = "Refreshing tags…"
+			return m, tea.Batch(cmd, refreshTagsCmd())
 		}
 
 		return m, cmd
@@ -227,14 +223,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *model) updateFocusedInput(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-
 	switch m.focus {
 	case focusOutput:
 		m.output, cmd = m.output.Update(msg)
 	case focusToken:
 		m.token, cmd = m.token.Update(msg)
-	default:
-		return *m, nil
 	}
 	return *m, cmd
 }
@@ -244,8 +237,6 @@ func (m *model) applyFocus() {
 	m.token.Blur()
 
 	switch m.focus {
-	case focusTags:
-		// implicit
 	case focusOutput:
 		m.output.Focus()
 	case focusToken:
