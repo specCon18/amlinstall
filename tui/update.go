@@ -279,7 +279,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.clearError()
 			m.loadingTags = true
-			m.status = "Refreshing tags…"
+			m.status = "Refreshing version list…"
 			return m, refreshTagsCmd()
 		}
 
@@ -324,9 +324,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if it, ok := m.tags.SelectedItem().(tagItem); ok {
 					m.selectedTag = it.raw
 					if it.isLatest {
-						m.status = "Selected tag: " + it.display + " (latest)"
+						m.status = "Selected version: " + it.display + " (latest)"
 					} else {
-						m.status = "Selected tag: " + it.display
+						m.status = "Selected version: " + it.display
 					}
 				}
 			}
@@ -347,7 +347,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if len(items) == 0 {
-			m.setError(errors.New("no tags found for this repository"))
+			m.setError(errors.New("no versions found for this repository"))
 			m.status = "No tags found."
 			m.tags.SetItems(nil)
 			return m, nil
@@ -394,9 +394,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		selectedDisplay := items[selectedIdx].display
 		if selectedIdx == 0 {
-			m.status = "Selected tag: " + selectedDisplay + " (latest)"
+			m.status = "Selected version: " + selectedDisplay + " (latest)"
 		} else {
-			m.status = "Selected tag: " + selectedDisplay
+			m.status = "Selected version: " + selectedDisplay
 		}
 
 		return m, nil
@@ -423,7 +423,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.initialRefresh {
 			m.initialRefresh = false
 			m.loadingTags = true
-			m.status = "Refreshing tags…"
+			m.status = "Refreshing version list…"
 			return m, tea.Batch(cmd, refreshTagsCmd())
 		}
 

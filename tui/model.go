@@ -73,7 +73,7 @@ func newModel() model {
 	token.EchoCharacter = '•'
 
 	l := list.New([]list.Item{}, list.NewDefaultDelegate(), 40, 8)
-	l.Title = "Tags"
+	l.Title = "Version"
 	l.SetShowHelp(false)
 	l.SetFilteringEnabled(false)
 	l.DisableQuitKeybindings()

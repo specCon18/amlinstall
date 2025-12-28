@@ -30,11 +30,9 @@ func (m model) View() string {
 				Border(lipgloss.RoundedBorder()).
 				MarginTop(1)
 
-		panelFocused = panelBase.Copy().
-				Border(lipgloss.DoubleBorder()).
-				Bold(true)
-
-		panelTitle = lipgloss.NewStyle().Bold(true)
+		panelFocused = panelBase.Border(lipgloss.DoubleBorder()).Bold(true)
+		
+		settingsTitleStyle = lipgloss.NewStyle().Bold(true).PaddingBottom(1)
 
 		fieldFocused = lipgloss.NewStyle().Bold(true)
 		fieldBlurred = lipgloss.NewStyle().Faint(true)
@@ -65,14 +63,12 @@ func (m model) View() string {
 	// - 2 columns border (left+right)
 	// - 2 columns padding (left+right), since panel padding is (1,1)
 	rightInnerW := rightW - 4
-	if rightInnerW < 10 {
-		rightInnerW = 10
-	}
+	rightInnerW = max(rightInnerW, 10)
 
-	title := "GitHub Release Asset Helper"
+	title := "MelonLoader Automated Installer Linux Edition"
 	sub := fmt.Sprintf("%s/%s  •  %s", hardOwner, hardRepo, hardAsset)
 	if m.loadingTags {
-		sub = fmt.Sprintf("%s  •  %s Refreshing tags…", sub, m.spin.View())
+		sub = fmt.Sprintf("%s  •  %s Refreshing Version List…", sub, m.spin.View())
 	}
 	if m.downloading {
 		sub = fmt.Sprintf("%s  •  %s Downloading…", sub, m.spin.View())
@@ -95,24 +91,21 @@ func (m model) View() string {
 		settingsPanelStyle = panelFocused
 	}
 
-	tagHeader := "Tags"
-	if m.selectedTag != "" {
-		tagHeader = fmt.Sprintf("%s (selected: %s)", tagHeader, m.selectedTag)
-	}
-	if m.focus == focusTags {
-		tagHeader = "▶ " + tagHeader
+	// Left panel: keep the list's own title ("Version") and remove our redundant header.
+	// Optional: show selected tag as a subtle line below the list (non-redundant).
+	var leftBody strings.Builder
+	leftBody.WriteString(m.tags.View())
+
+	if strings.TrimSpace(m.selectedTag) != "" {
+		// Show raw tag (may include leading v). If you prefer normalized, say so.
+		fmt.Fprintf(&leftBody, "\n%s", muted.Render("Selected: "+m.selectedTag))
 	}
 
 	tagsPanel := tagsPanelStyle.
 		Width(leftW).
-		Render(
-			lipgloss.JoinVertical(
-				lipgloss.Left,
-				panelTitle.Render(tagHeader),
-				m.tags.View(),
-			),
-		)
+		Render(leftBody.String())
 
+	// Right panel: inputs + status
 	var rightBody strings.Builder
 
 	settingsTitle := "Download Settings"
@@ -121,20 +114,23 @@ func (m model) View() string {
 	}
 
 	fmt.Fprintf(&rightBody, "%s\n%s\n",
-		panelTitle.Render(settingsTitle),
+		settingsTitleStyle.Render(settingsTitle),
 		muted.Render("Tab/Shift+Tab to change focus."),
 	)
 
 	outputView := m.output.View()
 	tokenView := m.token.View()
 
-	if m.focus == focusOutput {
+	switch m.focus {
+	case focusOutput:
 		outputView = fieldFocused.Render(outputView)
 		tokenView = fieldBlurred.Render(tokenView)
-	} else if m.focus == focusToken {
+
+	case focusToken:
 		outputView = fieldBlurred.Render(outputView)
 		tokenView = fieldFocused.Render(tokenView)
-	} else {
+
+	default:
 		outputView = fieldBlurred.Render(outputView)
 		tokenView = fieldBlurred.Render(tokenView)
 	}
