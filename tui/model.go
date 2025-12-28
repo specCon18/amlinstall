@@ -14,13 +14,13 @@ import (
 type focusTarget int
 
 const (
-	focusOwner focusTarget = iota
-	focusRepo
-	focusTags
-	focusAsset
+	// owner/repo/asset inputs removed
+	focusTags focusTarget = iota
 	focusOutput
 	focusToken
 )
+
+
 
 type tagItem struct {
 	value string
@@ -31,9 +31,6 @@ func (t tagItem) Description() string { return "" }
 func (t tagItem) FilterValue() string { return t.value }
 
 type model struct {
-	owner  textinput.Model
-	repo   textinput.Model
-	asset  textinput.Model
 	output textinput.Model
 	token  textinput.Model
 
@@ -55,24 +52,6 @@ type model struct {
 }
 
 func newModel() model {
-	owner := textinput.New()
-	owner.Placeholder = "LavaGang"
-	owner.Prompt = "Owner:  "
-	owner.CharLimit = 200
-	owner.Width = 40
-
-	repo := textinput.New()
-	repo.Placeholder = "MelonLoader"
-	repo.Prompt = "Repo:   "
-	repo.CharLimit = 200
-	repo.Width = 40
-
-	asset := textinput.New()
-	asset.Placeholder = "MelonLoader.x64.zip"
-	asset.Prompt = "Asset:  "
-	asset.CharLimit = 500
-	asset.Width = 40
-
 	output := textinput.New()
 	output.Placeholder = "./downloads/<asset>"
 	output.Prompt = "Output: "
@@ -97,13 +76,10 @@ func newModel() model {
 	sp := spinner.New()
 
 	m := model{
-		owner:  owner,
-		repo:   repo,
-		asset:  asset,
 		output: output,
 		token:  token,
 		tags:   l,
-		focus:  focusOwner,
+		focus:  focusTags,
 		spin:   sp,
 		status: "ctrl+r: refresh tags   ctrl+d: download   tab: next   shift+tab: prev   q: quit",
 	}
@@ -124,35 +100,21 @@ func (m *model) resolveOutput() string {
 	if out != "" {
 		return out
 	}
-	asset := strings.TrimSpace(m.asset.Value())
-	if asset == "" {
-		return ""
-	}
-	return filepath.Join(".", "downloads", asset)
+	// derive from hardcoded asset
+	return filepath.Join(".", "downloads", hardAsset)
 }
 
 func (m *model) validateRefresh() error {
-	if strings.TrimSpace(m.owner.Value()) == "" || strings.TrimSpace(m.repo.Value()) == "" {
-		return errors.New("owner and repo are required to refresh tags")
-	}
+	// owner/repo are hardcoded, so always valid
 	return nil
 }
 
 func (m *model) validateDownload() error {
-	if strings.TrimSpace(m.owner.Value()) == "" {
-		return errors.New("owner is required")
-	}
-	if strings.TrimSpace(m.repo.Value()) == "" {
-		return errors.New("repo is required")
-	}
 	if strings.TrimSpace(m.selectedTag) == "" {
 		return errors.New("select a tag (refresh with 'r' and choose one)")
 	}
-	if strings.TrimSpace(m.asset.Value()) == "" {
-		return errors.New("asset is required")
-	}
 	if strings.TrimSpace(m.resolveOutput()) == "" {
-		return errors.New("output is required (or provide asset so default output can be derived)")
+		return errors.New("output is required")
 	}
 	return nil
 }
@@ -167,4 +129,3 @@ func (m *model) setError(err error) {
 func (m *model) clearError() {
 	m.err = nil
 }
-

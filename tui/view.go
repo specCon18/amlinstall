@@ -14,12 +14,14 @@ func (m model) View() string {
 	sectionStyle := lipgloss.NewStyle().MarginTop(1)
 	statusStyle := lipgloss.NewStyle().Faint(true)
 	errorStyle := lipgloss.NewStyle().Bold(true)
+	kvStyle := lipgloss.NewStyle().Faint(true)
 
-	fmt.Fprintf(&b, "%s\n\n", headerStyle.Render("GitHub Release Asset Helper (TUI)"))
+	fmt.Fprintf(&b, "%s\n\n", headerStyle.Render("MelonLoader Automated Installer Linux"))
 
-	// Inputs
-	fmt.Fprintf(&b, "%s\n", m.owner.View())
-	fmt.Fprintf(&b, "%s\n", m.repo.View())
+	// Static config (replaces owner/repo/asset inputs)
+	fmt.Fprintf(&b, "%s\n", kvStyle.Render(fmt.Sprintf("Owner: %s", hardOwner)))
+	fmt.Fprintf(&b, "%s\n", kvStyle.Render(fmt.Sprintf("Repo:  %s", hardRepo)))
+	fmt.Fprintf(&b, "%s\n", kvStyle.Render(fmt.Sprintf("Asset: %s", hardAsset)))
 
 	// Tag section
 	tagHeader := "Tags"
@@ -34,8 +36,7 @@ func (m model) View() string {
 	fmt.Fprintf(&b, "%s\n", m.tags.View())
 
 	// Remaining inputs
-	fmt.Fprintf(&b, "\n%s\n", m.asset.View())
-	fmt.Fprintf(&b, "%s\n", m.output.View())
+	fmt.Fprintf(&b, "\n%s\n", m.output.View())
 	fmt.Fprintf(&b, "%s\n", m.token.View())
 
 	// Download indicator
@@ -49,9 +50,8 @@ func (m model) View() string {
 		fmt.Fprintf(&b, "%s\n", errorStyle.Render("Error: "+m.err.Error()))
 	}
 
-	// Footer help
-	help := "r: refresh tags   d: download   tab: next field   shift+tab: prev field   enter: select tag   esc: clear status   q: quit"
-	fmt.Fprintf(&b, "\n%s\n", statusStyle.Render(help))
+	// Footer help (single source of truth)
+	fmt.Fprintf(&b, "\n%s\n", statusStyle.Render(helpText))
 
 	return lipgloss.NewStyle().Padding(1, 2).Render(b.String())
 }
