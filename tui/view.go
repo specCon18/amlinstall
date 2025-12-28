@@ -8,39 +8,37 @@ import (
 )
 
 func (m model) View() string {
-	// Layout sizing
-	w := m.width
+	// Shrink overall UI width by 4 columns.
+	w := m.width - 4
 	if w <= 0 {
-		w = 96 // reasonable default if WindowSizeMsg hasn't arrived yet
+		w = 92
 	}
-	h := m.height
-	_ = h // reserved if you later want dynamic vertical sizing
 
-	// Styles
 	var (
-		// Base
-		appPad  = lipgloss.NewStyle().Padding(1, 2)
-		muted   = lipgloss.NewStyle().Faint(true)
-		bold    = lipgloss.NewStyle().Bold(true)
-		warn    = lipgloss.NewStyle().Bold(true)
-		success = lipgloss.NewStyle().Bold(true)
+		appPad = lipgloss.NewStyle().Padding(1, 2)
 
-		// Header
+		muted = lipgloss.NewStyle().Faint(true)
+		bold  = lipgloss.NewStyle().Bold(true)
+
 		titleBar = lipgloss.NewStyle().
 				Bold(true).
 				Padding(0, 1).
-				Border(lipgloss.RoundedBorder()).
-				BorderBottom(true)
+				Border(lipgloss.RoundedBorder())
 
-		// Panels
-		panel = lipgloss.NewStyle().
-			Padding(1, 1).
-			Border(lipgloss.RoundedBorder()).
-			MarginTop(1)
+		panelBase = lipgloss.NewStyle().
+				Padding(1, 1).
+				Border(lipgloss.RoundedBorder()).
+				MarginTop(1)
+
+		panelFocused = panelBase.Copy().
+				Border(lipgloss.DoubleBorder()).
+				Bold(true)
 
 		panelTitle = lipgloss.NewStyle().Bold(true)
 
-		// Status boxes
+		fieldFocused = lipgloss.NewStyle().Bold(true)
+		fieldBlurred = lipgloss.NewStyle().Faint(true)
+
 		statusBox = lipgloss.NewStyle().
 				Padding(0, 1).
 				Border(lipgloss.RoundedBorder())
@@ -50,15 +48,12 @@ func (m model) View() string {
 				Border(lipgloss.RoundedBorder()).
 				Bold(true)
 
-		// Footer
 		footer = lipgloss.NewStyle().MarginTop(1)
 	)
 
-	// Compute column widths
-	// Keep tags comfortably wide; controls narrow but usable.
 	gap := 2
-	leftW := (w - 2*2 - gap) * 2 / 3  // account roughly for outer padding
-	rightW := (w - 2*2 - gap) - leftW // remaining
+	leftW := (w - 2*2 - gap) * 2 / 3
+	rightW := (w - 2*2 - gap) - leftW
 	if leftW < 40 {
 		leftW = 40
 	}
@@ -66,7 +61,14 @@ func (m model) View() string {
 		rightW = 34
 	}
 
-	// Header content
+	// Right panel inner width must account for:
+	// - 2 columns border (left+right)
+	// - 2 columns padding (left+right), since panel padding is (1,1)
+	rightInnerW := rightW - 4
+	if rightInnerW < 10 {
+		rightInnerW = 10
+	}
+
 	title := "GitHub Release Asset Helper"
 	sub := fmt.Sprintf("%s/%s  •  %s", hardOwner, hardRepo, hardAsset)
 	if m.loadingTags {
@@ -84,13 +86,24 @@ func (m model) View() string {
 		),
 	)
 
-	// Left panel: tags
+	tagsPanelStyle := panelBase
+	if m.focus == focusTags {
+		tagsPanelStyle = panelFocused
+	}
+	settingsPanelStyle := panelBase
+	if m.focus == focusOutput || m.focus == focusToken {
+		settingsPanelStyle = panelFocused
+	}
+
 	tagHeader := "Tags"
 	if m.selectedTag != "" {
 		tagHeader = fmt.Sprintf("%s (selected: %s)", tagHeader, m.selectedTag)
 	}
+	if m.focus == focusTags {
+		tagHeader = "▶ " + tagHeader
+	}
 
-	tagsPanel := panel.
+	tagsPanel := tagsPanelStyle.
 		Width(leftW).
 		Render(
 			lipgloss.JoinVertical(
@@ -100,36 +113,46 @@ func (m model) View() string {
 			),
 		)
 
-	// Right panel: inputs + status
 	var rightBody strings.Builder
+
+	settingsTitle := "Download Settings"
+	if m.focus == focusOutput || m.focus == focusToken {
+		settingsTitle = "▶ " + settingsTitle
+	}
+
 	fmt.Fprintf(&rightBody, "%s\n%s\n",
-		panelTitle.Render("Download Settings"),
-		muted.Render("Output path may be empty to use the default."),
+		panelTitle.Render(settingsTitle),
+		muted.Render("Tab/Shift+Tab to change focus."),
 	)
-	fmt.Fprintf(&rightBody, "\n%s\n", m.output.View())
-	fmt.Fprintf(&rightBody, "%s\n", m.token.View())
 
-	// Status area
+	outputView := m.output.View()
+	tokenView := m.token.View()
+
+	if m.focus == focusOutput {
+		outputView = fieldFocused.Render(outputView)
+		tokenView = fieldBlurred.Render(tokenView)
+	} else if m.focus == focusToken {
+		outputView = fieldBlurred.Render(outputView)
+		tokenView = fieldFocused.Render(tokenView)
+	} else {
+		outputView = fieldBlurred.Render(outputView)
+		tokenView = fieldBlurred.Render(tokenView)
+	}
+
+	fmt.Fprintf(&rightBody, "\n%s\n", outputView)
+	fmt.Fprintf(&rightBody, "%s\n", tokenView)
+
 	if strings.TrimSpace(m.status) != "" {
-		// Give a slight semantic cue based on common phrases
-		st := m.status
-		box := statusBox
-		if strings.HasPrefix(strings.ToLower(st), "downloaded:") {
-			box = box.Copy()
-			st = success.Render(st)
-		}
-		fmt.Fprintf(&rightBody, "\n%s\n", box.Width(rightW-2).Render(st))
+		fmt.Fprintf(&rightBody, "\n%s\n", statusBox.Width(rightInnerW).Render(m.status))
 	}
-
 	if m.err != nil {
-		fmt.Fprintf(&rightBody, "\n%s\n", errorBox.Width(rightW-2).Render(warn.Render("Error: ")+m.err.Error()))
+		fmt.Fprintf(&rightBody, "\n%s\n", errorBox.Width(rightInnerW).Render("Error: "+m.err.Error()))
 	}
 
-	rightPanel := panel.
+	rightPanel := settingsPanelStyle.
 		Width(rightW).
 		Render(rightBody.String())
 
-	// Main content row
 	content := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		tagsPanel,
@@ -137,7 +160,6 @@ func (m model) View() string {
 		rightPanel,
 	)
 
-	// Footer help
 	footerLine := footer.Render(muted.Render(helpText))
 
 	return appPad.Render(

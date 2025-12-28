@@ -65,7 +65,6 @@ func parseSemver(s string) semverKey {
 	s = strings.TrimSpace(s)
 	k := semverKey{origString: s}
 
-	// Require a leading digit to consider it semver-like.
 	if s == "" || !unicode.IsDigit(rune(s[0])) {
 		return k
 	}
@@ -126,6 +125,22 @@ func parseSemver(s string) semverKey {
 	return k
 }
 
+func isNumeric(s string) (int, bool) {
+	if s == "" {
+		return 0, false
+	}
+	for _, r := range s {
+		if !unicode.IsDigit(r) {
+			return 0, false
+		}
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, false
+	}
+	return v, true
+}
+
 func cmpPrerelease(a, b []string) int {
 	// Return: -1 if a<b, 0 if equal, +1 if a>b (per semver precedence rules)
 	n := len(a)
@@ -148,7 +163,6 @@ func cmpPrerelease(a, b []string) int {
 				return 1
 			}
 		case aIsNum && !bIsNum:
-			// Numeric identifiers have lower precedence than non-numeric
 			return -1
 		case !aIsNum && bIsNum:
 			return 1
@@ -161,8 +175,6 @@ func cmpPrerelease(a, b []string) int {
 			}
 		}
 	}
-	// If equal so far, shorter prerelease has lower precedence? (Actually: smaller set has lower precedence)
-	// Semver: If a has fewer identifiers and all equal so far, a has lower precedence.
 	if len(a) < len(b) {
 		return -1
 	}
@@ -172,27 +184,10 @@ func cmpPrerelease(a, b []string) int {
 	return 0
 }
 
-func isNumeric(s string) (int, bool) {
-	if s == "" {
-		return 0, false
-	}
-	for _, r := range s {
-		if !unicode.IsDigit(r) {
-			return 0, false
-		}
-	}
-	v, err := strconv.Atoi(s)
-	if err != nil {
-		return 0, false
-	}
-	return v, true
-}
-
 func semverGreater(displayA, displayB string) bool {
 	a := parseSemver(displayA)
 	b := parseSemver(displayB)
 
-	// Prefer semver-like values over non-semver-like values.
 	if a.ok && !b.ok {
 		return true
 	}
@@ -200,11 +195,9 @@ func semverGreater(displayA, displayB string) bool {
 		return false
 	}
 	if !a.ok && !b.ok {
-		// Fall back to lexical descending if neither parses.
 		return displayA > displayB
 	}
 
-	// Compare major/minor/patch descending.
 	if a.major != b.major {
 		return a.major > b.major
 	}
@@ -215,7 +208,6 @@ func semverGreater(displayA, displayB string) bool {
 		return a.patch > b.patch
 	}
 
-	// Same base version: release > prerelease
 	if a.hasPre != b.hasPre {
 		return !a.hasPre && b.hasPre
 	}
@@ -223,7 +215,6 @@ func semverGreater(displayA, displayB string) bool {
 		return false
 	}
 
-	// Both prerelease: compare prerelease identifiers (higher wins)
 	return cmpPrerelease(a.pre, b.pre) > 0
 }
 
@@ -251,7 +242,7 @@ func downloadCmd(tag, out, token string) tea.Cmd {
 			ctx,
 			hardOwner,
 			hardRepo,
-			tag, // RAW tag (do not normalize)
+			tag, // RAW tag
 			hardAsset,
 			out,
 			token,
@@ -339,7 +330,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if key == "enter" {
 				if it, ok := m.tags.SelectedItem().(tagItem); ok {
 					m.selectedTag = it.raw
-					// Show the normalized tag in status
 					if it.isLatest {
 						m.status = "Selected tag: " + it.display + " (latest)"
 					} else {
@@ -376,7 +366,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			di := items[i].display
 			dj := items[j].display
 			if di == dj {
-				// Tie-breaker: stable ordering by raw desc
 				return items[i].raw > items[j].raw
 			}
 			return semverGreater(di, dj)
@@ -392,7 +381,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.tags.SetItems(litems)
 
-		// Preserve selection by RAW tag if possible; otherwise select first.
+		// Preserve selection by RAW tag if possible; otherwise select latest.
 		selectedIdx := 0
 		if m.selectedTag != "" {
 			found := false
@@ -404,20 +393,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			if !found {
-				// fall back to latest
 				m.selectedTag = items[0].raw
+				selectedIdx = 0
 			}
 		} else {
 			m.selectedTag = items[0].raw
+			selectedIdx = 0
 		}
 
 		m.tags.Select(selectedIdx)
 
-		// Status message
-		if items[0].raw == m.selectedTag {
-			m.status = "Loaded tags. Latest: " + items[0].display
+		// FIX #1: Always report selection in the same "Selected tag:" format.
+		selectedDisplay := items[selectedIdx].display
+		if selectedIdx == 0 {
+			m.status = "Selected tag: " + selectedDisplay + " (latest)"
 		} else {
-			m.status = "Loaded tags."
+			m.status = "Selected tag: " + selectedDisplay
 		}
 
 		return m, nil
