@@ -46,4 +46,3 @@ func newGetTagsCmd() *cobra.Command {
 
 	return cmd
 }
-

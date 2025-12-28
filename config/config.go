@@ -1,8 +1,8 @@
 package config
 
 import (
-	"github.com/spf13/viper"
 	"automelonloaderinstallergo/internal/logger"
+	"github.com/spf13/viper"
 )
 
 func Init() {

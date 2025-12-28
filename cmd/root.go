@@ -10,6 +10,7 @@ import (
 	"automelonloaderinstallergo/config"
 	"automelonloaderinstallergo/internal/logger"
 )
+
 var rootCmd = &cobra.Command{
 	Use:   "app",
 	Short: "A TUI-first MelonLoader Automated Installer with sane Linux packaging.",
@@ -35,4 +36,3 @@ func init() {
 	rootCmd.AddCommand(newGetTagsCmd())
 	rootCmd.AddCommand(newGetAssetCmd())
 }
-

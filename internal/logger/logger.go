@@ -16,4 +16,3 @@ func init() {
 		Level:           log.InfoLevel,
 	})
 }
-

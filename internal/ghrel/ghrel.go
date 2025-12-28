@@ -282,4 +282,3 @@ func GetTagsViaGit(ctx context.Context, remoteURL string) ([]string, error) {
 
 	return tags, nil
 }
-

@@ -2,4 +2,3 @@
 // It provides text inputs for owner/repo/asset/output/token, a tag selection list,
 // and keybind-driven actions to refresh tags and download a release asset.
 package tui
-
