@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -59,6 +60,23 @@ type model struct {
 	initialRefresh bool
 
 	src releases.Source
+
+	refreshCancel  context.CancelFunc
+	downloadCancel context.CancelFunc
+}
+
+func (m *model) cancelRefresh() {
+	if m.refreshCancel != nil {
+		m.refreshCancel()
+		m.refreshCancel = nil
+	}
+}
+
+func (m *model) cancelDownload() {
+	if m.downloadCancel != nil {
+		m.downloadCancel()
+		m.downloadCancel = nil
+	}
 }
 
 func newModel() model {

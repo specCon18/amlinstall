@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 
@@ -21,6 +22,8 @@ type versionsErrMsg struct {
 	err error
 }
 
+type versionsCanceledMsg struct{}
+
 type downloadDoneMsg struct {
 	out string
 }
@@ -29,30 +32,69 @@ type downloadErrMsg struct {
 	err error
 }
 
+type downloadCanceledMsg struct{}
+
 const focusCount = int(focusToken) + 1
 
-func refreshVersionsCmd(src releases.Source, token string) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+func retryWithBackoff(ctx context.Context, attempts int, baseDelay time.Duration, fn func() error) error {
+	delay := baseDelay
+	for i := 0; i < attempts; i++ {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		err := fn()
+		if err == nil {
+			return nil
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		if i == attempts-1 {
+			return err
+		}
+		t := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return ctx.Err()
+		case <-t.C:
+		}
+		delay *= 2
+	}
+	return ctx.Err()
+}
 
-		versions, err := src.ListTags(ctx, hardOwner, hardRepo, token)
+func refreshVersionsCmd(ctx context.Context, src releases.Source, token string) tea.Cmd {
+	return func() tea.Msg {
+		var versions []string
+		err := retryWithBackoff(ctx, 3, 250*time.Millisecond, func() error {
+			v, e := src.ListTags(ctx, hardOwner, hardRepo, token)
+			if e == nil {
+				versions = v
+			}
+			return e
+		})
 		if err != nil {
-			return versionsErrMsg{err: err}
+			if errors.Is(err, context.Canceled) {
+				return versionsCanceledMsg{}
+			}
+			return versionsErrMsg{err: fmt.Errorf("refresh versions: %w", err)}
 		}
 		return versionsLoadedMsg{versions: versions}
 	}
 }
 
-func downloadCmd(src releases.Source, tag, out, token string) tea.Cmd {
+func downloadCmd(ctx context.Context, src releases.Source, tag, out, token string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-
-		if err := src.DownloadAsset(ctx, hardOwner, hardRepo, tag /* raw tag */, hardAsset, out, token); err != nil {
-			return downloadErrMsg{err: err}
+		err := retryWithBackoff(ctx, 3, 500*time.Millisecond, func() error {
+			return src.DownloadAsset(ctx, hardOwner, hardRepo, tag /* raw tag */, hardAsset, out, token)
+		})
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return downloadCanceledMsg{}
+			}
+			return downloadErrMsg{err: fmt.Errorf("download asset: %w", err)}
 		}
-
 		return downloadDoneMsg{out: out}
 	}
 }
@@ -74,6 +116,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		key := msg.String()
 
 		if key == "q" || key == "ctrl+c" {
+			m.cancelRefresh()
+			m.cancelDownload()
 			return m, tea.Quit
 		}
 
@@ -84,19 +128,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if key == "ctrl+r" {
-			if m.loadingVersions {
-				return m, nil
-			}
+			// Cancel/replace policy: starting a refresh cancels any in-flight work.
+			m.cancelDownload()
+			m.downloading = false
+			m.cancelRefresh()
+
 			m.clearError()
 			m.loadingVersions = true
 			m.status = "Refreshing version list…"
-			return m, refreshVersionsCmd(m.src, m.resolveToken())
+
+			baseCtx, cancel := context.WithCancel(context.Background())
+			m.refreshCancel = cancel
+			ctx, timeoutCancel := context.WithTimeout(baseCtx, 30*time.Second)
+
+			inner := refreshVersionsCmd(ctx, m.src, m.resolveToken())
+			cmd := func() tea.Msg {
+				defer timeoutCancel()
+				return inner()
+			}
+			return m, cmd
 		}
 
 		if key == "ctrl+d" {
-			if m.downloading {
-				return m, nil
-			}
+			// Cancel/replace policy: starting a download cancels any in-flight work.
+			m.cancelRefresh()
+			m.loadingVersions = false
+			m.cancelDownload()
+
 			if err := m.validateDownload(); err != nil {
 				m.setError(err)
 				return m, nil
@@ -104,12 +162,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.clearError()
 			m.downloading = true
 			m.status = "Downloading…"
-			return m, downloadCmd(
+
+			baseCtx, cancel := context.WithCancel(context.Background())
+			m.downloadCancel = cancel
+			ctx, timeoutCancel := context.WithTimeout(baseCtx, 2*time.Minute)
+
+			inner := downloadCmd(
+				ctx,
 				m.src,
 				m.selectedVersionTag,
 				m.resolveOutput(),
 				m.resolveToken(),
 			)
+			cmd := func() tea.Msg {
+				defer timeoutCancel()
+				return inner()
+			}
+			return m, cmd
 		}
 
 		if key == "tab" {
@@ -148,6 +217,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case versionsLoadedMsg:
 		m.loadingVersions = false
+		m.refreshCancel = nil
 
 		items := make([]versionItem, 0, len(msg.versions))
 		for _, t := range msg.versions {
@@ -214,17 +284,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case versionsErrMsg:
 		m.loadingVersions = false
+		m.refreshCancel = nil
 		m.setError(msg.err)
+		return m, nil
+
+	case versionsCanceledMsg:
+		m.loadingVersions = false
+		m.refreshCancel = nil
+		m.status = "Refresh canceled."
 		return m, nil
 
 	case downloadDoneMsg:
 		m.downloading = false
+		m.downloadCancel = nil
 		m.status = "Downloaded: " + msg.out
 		return m, nil
 
 	case downloadErrMsg:
 		m.downloading = false
+		m.downloadCancel = nil
 		m.setError(msg.err)
+		return m, nil
+
+	case downloadCanceledMsg:
+		m.downloading = false
+		m.downloadCancel = nil
+		m.status = "Download canceled."
 		return m, nil
 
 	default:
@@ -235,7 +320,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.initialRefresh = false
 			m.loadingVersions = true
 			m.status = "Refreshing version list…"
-			return m, tea.Batch(cmd, refreshVersionsCmd(m.src, m.resolveToken()))
+
+			baseCtx, cancel := context.WithCancel(context.Background())
+			m.refreshCancel = cancel
+			ctx, timeoutCancel := context.WithTimeout(baseCtx, 30*time.Second)
+			inner := refreshVersionsCmd(ctx, m.src, m.resolveToken())
+			refreshCmd := func() tea.Msg {
+				defer timeoutCancel()
+				return inner()
+			}
+
+			return m, tea.Batch(cmd, refreshCmd)
 		}
 
 		return m, cmd
