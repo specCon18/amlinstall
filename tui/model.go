@@ -37,6 +37,11 @@ func (t versionItem) Title() string {
 func (t versionItem) Description() string { return "" }
 func (t versionItem) FilterValue() string { return t.display }
 
+type banner struct {
+	status string
+	err    error
+}
+
 type model struct {
 	output textinput.Model
 	token  textinput.Model
@@ -51,8 +56,7 @@ type model struct {
 	downloading     bool
 	spin            spinner.Model
 
-	status string
-	err    error
+	banner banner
 
 	width  int
 	height int
@@ -108,7 +112,7 @@ func newModel() model {
 		versions:       l,
 		focus:          focusVersions,
 		spin:           sp,
-		status:         "Ready",
+		banner:         banner{status: "Ready"},
 		initialRefresh: true,
 		src:            releases.NewGitHubSource(),
 	}
@@ -145,13 +149,23 @@ func (m *model) validateDownload() error {
 	return nil
 }
 
-func (m *model) setError(err error) {
-	m.err = err
+func (m *model) SetStatus(msg string) {
+	m.banner.status = msg
+	// A new status generally indicates a new UI state; clear any prior error.
+	m.banner.err = nil
+}
+
+func (m *model) SetError(err error) {
+	m.banner.err = err
 	if err != nil {
-		m.status = err.Error()
+		m.banner.status = err.Error()
 	}
 }
 
-func (m *model) clearError() {
-	m.err = nil
+func (m *model) ClearBanner() {
+	m.banner.status = ""
+	m.banner.err = nil
 }
+
+func (m model) Status() string { return m.banner.status }
+func (m model) Err() error     { return m.banner.err }

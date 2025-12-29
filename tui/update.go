@@ -122,8 +122,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if key == "esc" {
-			m.clearError()
-			m.status = "Ready"
+			m.ClearBanner()
+			m.SetStatus("Ready")
 			return m, nil
 		}
 
@@ -133,9 +133,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.downloading = false
 			m.cancelRefresh()
 
-			m.clearError()
+			m.ClearBanner()
 			m.loadingVersions = true
-			m.status = "Refreshing version list…"
+			m.SetStatus("Refreshing version list…")
 
 			baseCtx, cancel := context.WithCancel(context.Background())
 			m.refreshCancel = cancel
@@ -156,12 +156,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cancelDownload()
 
 			if err := m.validateDownload(); err != nil {
-				m.setError(err)
+				m.SetError(err)
 				return m, nil
 			}
-			m.clearError()
+			m.ClearBanner()
 			m.downloading = true
-			m.status = "Downloading…"
+			m.SetStatus("Downloading…")
 
 			baseCtx, cancel := context.WithCancel(context.Background())
 			m.downloadCancel = cancel
@@ -204,9 +204,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if it, ok := m.versions.SelectedItem().(versionItem); ok {
 					m.selectedVersionTag = it.raw
 					if it.isLatest {
-						m.status = "Selected version: " + it.display + " (latest)"
+						m.SetStatus("Selected version: " + it.display + " (latest)")
 					} else {
-						m.status = "Selected version: " + it.display
+						m.SetStatus("Selected version: " + it.display)
 					}
 				}
 			}
@@ -228,8 +228,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if len(items) == 0 {
-			m.setError(errors.New("no versions found for this repository"))
-			m.status = "No versions found."
+			m.SetError(errors.New("no versions found for this repository"))
+			m.SetStatus("No versions found.")
 			m.versions.SetItems(nil)
 			return m, nil
 		}
@@ -275,9 +275,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		selectedDisplay := items[selectedIdx].display
 		if selectedIdx == 0 {
-			m.status = "Selected version: " + selectedDisplay + " (latest)"
+			m.SetStatus("Selected version: " + selectedDisplay + " (latest)")
 		} else {
-			m.status = "Selected version: " + selectedDisplay
+			m.SetStatus("Selected version: " + selectedDisplay)
 		}
 
 		return m, nil
@@ -285,31 +285,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case versionsErrMsg:
 		m.loadingVersions = false
 		m.refreshCancel = nil
-		m.setError(msg.err)
+		m.SetError(msg.err)
 		return m, nil
 
 	case versionsCanceledMsg:
 		m.loadingVersions = false
 		m.refreshCancel = nil
-		m.status = "Refresh canceled."
+		m.SetStatus("Refresh canceled.")
 		return m, nil
 
 	case downloadDoneMsg:
 		m.downloading = false
 		m.downloadCancel = nil
-		m.status = "Downloaded: " + msg.out
+		m.SetStatus("Downloaded: " + msg.out)
 		return m, nil
 
 	case downloadErrMsg:
 		m.downloading = false
 		m.downloadCancel = nil
-		m.setError(msg.err)
+		m.SetError(msg.err)
 		return m, nil
 
 	case downloadCanceledMsg:
 		m.downloading = false
 		m.downloadCancel = nil
-		m.status = "Download canceled."
+		m.SetStatus("Download canceled.")
 		return m, nil
 
 	default:
@@ -319,7 +319,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.initialRefresh {
 			m.initialRefresh = false
 			m.loadingVersions = true
-			m.status = "Refreshing version list…"
+			m.SetStatus("Refreshing version list…")
 
 			baseCtx, cancel := context.WithCancel(context.Background())
 			m.refreshCancel = cancel

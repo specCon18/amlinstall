@@ -138,11 +138,11 @@ func (m model) View() string {
 	fmt.Fprintf(&rightBody, "\n%s\n", outputView)
 	fmt.Fprintf(&rightBody, "%s\n", tokenView)
 
-	if strings.TrimSpace(m.status) != "" {
-		fmt.Fprintf(&rightBody, "\n%s\n", statusBox.Width(rightInnerW).Render(m.status))
+	if strings.TrimSpace(m.Status()) != "" {
+		fmt.Fprintf(&rightBody, "\n%s\n", statusBox.Width(rightInnerW).Render(m.Status()))
 	}
-	if m.err != nil {
-		fmt.Fprintf(&rightBody, "\n%s\n", errorBox.Width(rightInnerW).Render("Error: "+m.err.Error()))
+	if m.Err() != nil {
+		fmt.Fprintf(&rightBody, "\n%s\n", errorBox.Width(rightInnerW).Render("Error: "+m.Err().Error()))
 	}
 
 	rightPanel := settingsPanelStyle.
