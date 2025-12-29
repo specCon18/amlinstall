@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"automelonloaderinstallergo/internal/releases"
+
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -55,6 +57,8 @@ type model struct {
 	height int
 
 	initialRefresh bool
+
+	src releases.Source
 }
 
 func newModel() model {
@@ -88,6 +92,7 @@ func newModel() model {
 		spin:           sp,
 		status:         "Ready",
 		initialRefresh: true,
+		src:            releases.NewGitHubSource(),
 	}
 
 	m.applyFocus()

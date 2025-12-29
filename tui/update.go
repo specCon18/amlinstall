@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"automelonloaderinstallergo/internal/ghrel"
+	"automelonloaderinstallergo/internal/releases"
 	"automelonloaderinstallergo/internal/version"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -31,14 +31,12 @@ type downloadErrMsg struct {
 
 const focusCount = int(focusToken) + 1
 
-func refreshVersionsCmd() tea.Cmd {
-	remote := ghrel.GitRemoteURL(hardOwner, hardRepo)
-
+func refreshVersionsCmd(src releases.Source, token string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		versions, err := ghrel.GetTagsViaGit(ctx, remote)
+		versions, err := src.ListTags(ctx, hardOwner, hardRepo, token)
 		if err != nil {
 			return versionsErrMsg{err: err}
 		}
@@ -46,20 +44,12 @@ func refreshVersionsCmd() tea.Cmd {
 	}
 }
 
-func downloadCmd(tag, out, token string) tea.Cmd {
+func downloadCmd(src releases.Source, tag, out, token string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 
-		if err := ghrel.DownloadReleaseAssetByTag(
-			ctx,
-			hardOwner,
-			hardRepo,
-			tag, // RAW tag
-			hardAsset,
-			out,
-			token,
-		); err != nil {
+		if err := src.DownloadAsset(ctx, hardOwner, hardRepo, tag /* raw tag */, hardAsset, out, token); err != nil {
 			return downloadErrMsg{err: err}
 		}
 
@@ -100,7 +90,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.clearError()
 			m.loadingVersions = true
 			m.status = "Refreshing version list…"
-			return m, refreshVersionsCmd()
+			return m, refreshVersionsCmd(m.src, m.resolveToken())
 		}
 
 		if key == "ctrl+d" {
@@ -115,6 +105,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.downloading = true
 			m.status = "Downloading…"
 			return m, downloadCmd(
+				m.src,
 				m.selectedVersionTag,
 				m.resolveOutput(),
 				m.resolveToken(),
@@ -244,7 +235,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.initialRefresh = false
 			m.loadingVersions = true
 			m.status = "Refreshing version list…"
-			return m, tea.Batch(cmd, refreshVersionsCmd())
+			return m, tea.Batch(cmd, refreshVersionsCmd(m.src, m.resolveToken()))
 		}
 
 		return m, cmd
