@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"automelonloaderinstallergo/internal/ghrel"
+	"automelonloaderinstallergo/internal/releases"
 
 	"github.com/spf13/cobra"
 )
@@ -24,8 +24,8 @@ func newGetTagsCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 			defer cancel()
 
-			remote := ghrel.GitRemoteURL(getTagsOwner, getTagsRepo)
-			tags, err := ghrel.GetTagsViaGit(ctx, remote)
+			src := releases.NewGitHubSource()
+			tags, err := src.ListTags(ctx, getTagsOwner, getTagsRepo, getTagsToken)
 			if err != nil {
 				return err
 			}

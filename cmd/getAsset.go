@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"automelonloaderinstallergo/internal/ghrel"
+	"automelonloaderinstallergo/internal/releases"
 
 	"github.com/spf13/cobra"
 )
@@ -35,7 +35,8 @@ func newGetAssetCmd() *cobra.Command {
 				out = filepath.Join(".", "downloads", getAssetAsset)
 			}
 
-			if err := ghrel.DownloadReleaseAssetByTag(ctx, getAssetOwner, getAssetRepo, getAssetTag, getAssetAsset, out, token); err != nil {
+			src := releases.NewGitHubSource()
+			if err := src.DownloadAsset(ctx, getAssetOwner, getAssetRepo, getAssetTag, getAssetAsset, out, token); err != nil {
 				return err
 			}
 
@@ -65,4 +66,3 @@ func resolveToken(flagToken string) string {
 	}
 	return os.Getenv("GITHUB_TOKEN")
 }
-
