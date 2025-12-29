@@ -34,6 +34,9 @@ type downloadErrMsg struct {
 
 type downloadCanceledMsg struct{}
 
+// initRefreshMsg triggers the startup auto-refresh flow.
+type initRefreshMsg struct{}
+
 const focusCount = int(focusToken) + 1
 
 func retryWithBackoff(ctx context.Context, attempts int, baseDelay time.Duration, fn func() error) error {
@@ -100,11 +103,75 @@ func downloadCmd(ctx context.Context, src releases.Source, tag, out, token strin
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(m.spin.Tick)
+	return tea.Batch(
+		m.spin.Tick,
+		func() tea.Msg { return initRefreshMsg{} },
+	)
+}
+
+func (m *model) startRefresh() tea.Cmd {
+	// Cancel/replace policy: starting a refresh cancels any in-flight work.
+	m.cancelDownload()
+	m.downloading = false
+	m.cancelRefresh()
+
+	if err := m.validateRefresh(); err != nil {
+		m.SetError(err)
+		return nil
+	}
+
+	m.ClearBanner()
+	m.loadingVersions = true
+	m.SetStatus("Refreshing version list…")
+
+	baseCtx, cancel := context.WithCancel(context.Background())
+	m.refreshCancel = cancel
+	ctx, timeoutCancel := context.WithTimeout(baseCtx, 30*time.Second)
+
+	inner := refreshVersionsCmd(ctx, m.src, m.resolveToken())
+	return func() tea.Msg {
+		defer timeoutCancel()
+		return inner()
+	}
+}
+
+func (m *model) startDownload() tea.Cmd {
+	// Cancel/replace policy: starting a download cancels any in-flight work.
+	m.cancelRefresh()
+	m.loadingVersions = false
+	m.cancelDownload()
+
+	if err := m.validateDownload(); err != nil {
+		m.SetError(err)
+		return nil
+	}
+
+	m.ClearBanner()
+	m.downloading = true
+	m.SetStatus("Downloading…")
+
+	baseCtx, cancel := context.WithCancel(context.Background())
+	m.downloadCancel = cancel
+	ctx, timeoutCancel := context.WithTimeout(baseCtx, 2*time.Minute)
+
+	inner := downloadCmd(
+		ctx,
+		m.src,
+		m.selectedVersionTag,
+		m.resolveOutput(),
+		m.resolveToken(),
+	)
+	return func() tea.Msg {
+		defer timeoutCancel()
+		return inner()
+	}
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+
+	case initRefreshMsg:
+		return m, m.startRefresh()
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -128,58 +195,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if key == "ctrl+r" {
-			// Cancel/replace policy: starting a refresh cancels any in-flight work.
-			m.cancelDownload()
-			m.downloading = false
-			m.cancelRefresh()
-
-			m.ClearBanner()
-			m.loadingVersions = true
-			m.SetStatus("Refreshing version list…")
-
-			baseCtx, cancel := context.WithCancel(context.Background())
-			m.refreshCancel = cancel
-			ctx, timeoutCancel := context.WithTimeout(baseCtx, 30*time.Second)
-
-			inner := refreshVersionsCmd(ctx, m.src, m.resolveToken())
-			cmd := func() tea.Msg {
-				defer timeoutCancel()
-				return inner()
-			}
-			return m, cmd
+			return m, m.startRefresh()
 		}
+
 
 		if key == "ctrl+d" {
-			// Cancel/replace policy: starting a download cancels any in-flight work.
-			m.cancelRefresh()
-			m.loadingVersions = false
-			m.cancelDownload()
-
-			if err := m.validateDownload(); err != nil {
-				m.SetError(err)
-				return m, nil
-			}
-			m.ClearBanner()
-			m.downloading = true
-			m.SetStatus("Downloading…")
-
-			baseCtx, cancel := context.WithCancel(context.Background())
-			m.downloadCancel = cancel
-			ctx, timeoutCancel := context.WithTimeout(baseCtx, 2*time.Minute)
-
-			inner := downloadCmd(
-				ctx,
-				m.src,
-				m.selectedVersionTag,
-				m.resolveOutput(),
-				m.resolveToken(),
-			)
-			cmd := func() tea.Msg {
-				defer timeoutCancel()
-				return inner()
-			}
-			return m, cmd
+			return m, m.startDownload()
 		}
+
 
 		if key == "tab" {
 			m.focus = focusTarget((int(m.focus) + 1) % focusCount)
@@ -315,23 +338,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		var cmd tea.Cmd
 		m.spin, cmd = m.spin.Update(msg)
-
-		if m.initialRefresh {
-			m.initialRefresh = false
-			m.loadingVersions = true
-			m.SetStatus("Refreshing version list…")
-
-			baseCtx, cancel := context.WithCancel(context.Background())
-			m.refreshCancel = cancel
-			ctx, timeoutCancel := context.WithTimeout(baseCtx, 30*time.Second)
-			inner := refreshVersionsCmd(ctx, m.src, m.resolveToken())
-			refreshCmd := func() tea.Msg {
-				defer timeoutCancel()
-				return inner()
-			}
-
-			return m, tea.Batch(cmd, refreshCmd)
-		}
 
 		return m, cmd
 	}

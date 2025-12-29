@@ -61,8 +61,6 @@ type model struct {
 	width  int
 	height int
 
-	initialRefresh bool
-
 	src releases.Source
 
 	refreshCancel  context.CancelFunc
@@ -112,9 +110,8 @@ func newModel() model {
 		versions:       l,
 		focus:          focusVersions,
 		spin:           sp,
-		banner:         banner{status: "Ready"},
-		initialRefresh: true,
-		src:            releases.NewGitHubSource(),
+		banner: banner{status: "Ready"},
+		src:    releases.NewGitHubSource(),
 	}
 
 	m.applyFocus()
